@@ -1,0 +1,9 @@
+Mobility : 1.0
+SurfaceEnergy : 1.0
+Eta : 10
+GridSize : 100
+dx : 1.0
+TotalTime : 20.0
+dt : 0.001
+GrainForce : 1
+Beta : 0.0
