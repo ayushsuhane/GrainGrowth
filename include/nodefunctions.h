@@ -33,6 +33,7 @@ node node_buildlist2D(node, node, node, node, node);
 node _node_checklist(node, node);
 node node_membersort(node );
 
+float node_gradient2D(int, node, node, float);
 float node_laplacian1D(int, node, node, node, float);
 float node_laplacian2D(int, node, node, node, node, node, float);
 float node_laplacian2D_comp(float, float, float, float, float, float);
@@ -51,8 +52,8 @@ void node_visual(char *, int);
 
 //Not actually node functions but phase field functions
 float node_interface(float, float);
-float node_addforce(int, float, float);
+float node_addforce(int, float, float, int);
 node node_update(node ,int);
-node node_phisolver(char *, int, node, node, node, node, node, node,  float);
-node node_csolver(char *, int, node, node, node, node, node, node,  float);
+node node_phisolver(char *, int, node, node, node, node, node, node,  float, int);
+node node_csolver(char *, int, node, node, node, node, node, node,  float, int);
 #endif

@@ -283,6 +283,15 @@ node node_membersort(node n)
 	return n;
 }
 
+float node_gradient2D(int grainnum, node second, node first, float dx)
+{
+	float val_second, val_first;
+	val_second = node_phival(second, grainnum);
+	val_first = node_phival(first, grainnum);
+
+	return (val_second - val_first)/(2.0*dx);
+}
+
 float node_laplacian1D(int grainnum, node left, node mid, node right, float dx)
 {
 	float val_left, val_mid, val_right;
@@ -309,7 +318,7 @@ float node_laplacian2D(int grainnum, node up, node left, node centre, node right
 
 float node_laplacian2D_comp(float c_up, float c_left, float c_centre, float c_right, float c_down, float dx)
 {
-	return (c_up + c_down - 2.0*c_centre)/(dx*dx) + (c_right + c_left - 2.0*c_centre)/(dx*dx);
+	return ((c_up + c_down - 2.0*c_centre)/(dx*dx) + (c_right + c_left - 2.0*c_centre)/(dx*dx));
 }
 
 float node_phival(node n, int grainnum)
@@ -426,7 +435,7 @@ void node_outputcomp_tofile(char *FILENAME)
 
 void node_visual(char *FILENAME, int grainnum)
 {	
-	printf("Inside Visual Node\n");
+	//printf("Inside Visual Node\n");
 	extern node *grid;
 	extern int gridx, gridy;
 	extern int gridsize;
@@ -475,19 +484,20 @@ void node_visual(char *FILENAME, int grainnum)
 /*Not actually dependent on node, but solver functions*/
 float node_interface(float laplace, float phi)
 {
-	extern float mobility;
-	extern float se;
-	extern float dx;
+	extern float nd_mobility;
+	extern float nd_se;
+	extern float nd_dx;
 	extern int eta;
 	float PI = 3.14159;
 
-	return ((4.0*mobility*se/(eta*dx)) * ( ( eta*dx/PI)*(eta*dx/PI)*laplace  +  (phi) ) );
+	return ((4.0*nd_mobility*nd_se/(eta*nd_dx)) * ( ( eta*nd_dx/PI)*(eta*nd_dx/PI)*laplace  +  (phi) ) );
 }
 
-float node_addforce(int grainnum, float phi, float beta)
+float node_addforce(int grainnum, float phi, float beta, int t)
 {
 	extern int grainforce;
-	if(grainforce == 0) return 0.0;
+	extern int beta_timestep;
+	if(grainforce == 0 || t < beta_timestep) return 0.0;
 	else if (grainforce == grainnum ) return (-beta*6*phi*(1.0 - phi));
 	else return 0;
 }
@@ -534,7 +544,7 @@ node node_update(node list, int gid)
 node node_transfer(node new_list, node list)
 {
 	/*If unchanged, return the same*/
-	if(new_list.nactive == 1 && list.nactive == 1) return list;
+	if(new_list.nactive == 1 && list.nactive == 1 && list.comp == new_list.comp) return list;
 	/*Otherwise return the new list*/
 	else 
 	{	
@@ -580,7 +590,7 @@ node node_simplex(node list)
 	return list;
 }
 
-node node_phisolver(char *solver, int index, node up, node left, node centre, node right, node down, node update, float dx)
+node node_phisolver(char *solver, int index, node up, node left, node centre, node right, node down, node update, float dx, int t)
 {
 	float *laplacian;
 	float *term;
@@ -591,10 +601,10 @@ node node_phisolver(char *solver, int index, node up, node left, node centre, no
 	node list;
 	extern float omega;
 	extern float epsilon, mob_phi;
-	extern float dt;
+	extern float nd_dt;
 	extern float alpha;
 	extern int grainforce;
-	extern float beta;
+	extern float nd_beta;
 
 	if(!strcmp(solver,"MPF"))
 	{
@@ -624,14 +634,14 @@ node node_phisolver(char *solver, int index, node up, node left, node centre, no
 			{
 				term[j] += epsilon*epsilon/2.0*(laplacian[j] - laplacian[k]) 
 				+ omega*(1 - alpha*list.comp)*(list.phi[j] - list.phi[k]) 
-				+ node_addforce(list.activegrain[j], list.phi[j], beta) - node_addforce(list.activegrain[k], list.phi[k], beta); //Add the chemical energy term here
+				+ node_addforce(list.activegrain[j], list.phi[j], nd_beta, t) - node_addforce(list.activegrain[k], list.phi[k], nd_beta, t); //Add the chemical energy term here
 			}
 		}
 		//for(int j = 0; j < list.nactive; j++) printf("term = %d Grain %d Phi:%f laplace : %f, term : %f\n", j, list.activegrain[j], list.phi[j], laplacian[j], term[j]);
 		for (int j = 0; j < list.nactive ; j++)
 		{
 			term[j] *= 2.0*mob_phi/list.nactive;
-			term[j] = dt*term[j] + list.phi[j];
+			term[j] = nd_dt*term[j] + list.phi[j];
 			list.phi[j] = term[j];
 		}
 		list = node_simplex(list); //Limit to zero and one
@@ -644,11 +654,11 @@ node node_phisolver(char *solver, int index, node up, node left, node centre, no
 	}
 }
 
-node node_csolver(char *solver, int index, node up, node left, node centre, node right, node down, node update, float dx)
+node node_csolver(char *solver, int index, node up, node left, node centre, node right, node down, node update, float dx, int t)
 {
 	
-	extern float diffusivity, omega;
-	extern float dt;
+	extern float nd_diffusivity, omega;
+	extern float nd_dt;
 
 	if(!strcmp(solver, "equalcomp"))
 	{
@@ -664,13 +674,15 @@ node node_csolver(char *solver, int index, node up, node left, node centre, node
 			//Composition is already updated in phi_solver, so no need to change here
 			return update;
 		}
-		//printf("Inside csolver\n");
-		//printf("Solving index : %d\n", index);
+
+		
 		laplacian = node_laplacian2D_comp(up.comp, left.comp, centre.comp, right.comp, down.comp, dx);
 		//K is scaling factor used by Kim
 		// Assuming diffusivity is constant everywhere
-		term = diffusivity*laplacian - (diffusivity/K)*(node_termsumphi_comp(up, left, centre, right, down, dx)); 
-		update.comp = centre.comp + dt*(term);
+		term = nd_diffusivity*laplacian - (nd_diffusivity*K)*(node_termsumphi_comp(up, left, centre, right, down, dx));
+		if(index == 500 && t%10000 == 0) printf("Index : %d, term phi = %f, term lap = %f, diffusivity = %f\n", index, node_termsumphi_comp(up, left, centre, right, down, dx), laplacian, nd_diffusivity ); 
+		update.comp = centre.comp + nd_dt*(term);
+		if(index == 500 && t%10000 == 0) printf("Extra = %e, Composition old= %e, new= %e, timestep = %f new_comp = %e\n", nd_dt*(term), centre.comp, update.comp, nd_dt, centre.comp + nd_dt*(term) );
 		//printf("index : %d, comp : %f\n", index, update.comp);
 		return update;
 	}
@@ -696,7 +708,7 @@ float node_termsumphi_comp(node up, node left, node centre, node right, node dow
 	extern float omega;
 	float c = centre.comp;
 	/*Don't calculate anything if not required*/
-	if (alpha <= 0 || omega <= 0 || c <= 0.0) return 0.0;
+	if (alpha <= 0 || omega <= 0) return 0.0;
 
 	float term_laplace, term_grad;
 	
@@ -705,12 +717,37 @@ float node_termsumphi_comp(node up, node left, node centre, node right, node dow
 	float grad_cx = (right.comp - left.comp)/(2.0*dx);
 	float grad_cy = (up.comp - down.comp)/(2.0*dx);
 
-	float prodphi[5]; 
+	//COMPUTING LAPLACIAN AGAIN - can be merged with solver_phi to not to recompute again
+	/**************************************************************************/
+	node list;
+	list = node_buildlist2D(up, left, centre, right, down);
+	float laplacian[list.nactive];
+	float gradx[list.nactive], grady[list.nactive];
+	for(int j=0; j<list.nactive; j++)
+	{
+		laplacian[j] = node_laplacian2D(list.activegrain[j], up, left, centre, right, down, dx);
+		gradx[j] = node_gradient2D(list.activegrain[j], right, left, dx);
+		grady[j] = node_gradient2D(list.activegrain[j], up, down, dx);
+	}
+	/***************************************************************************/
+	float gradterm = 0, lapterm = 0, sqgrad = 0;
+	for (int j=0; j<list.nactive; j++)
+	{
+		gradterm += omega*alpha*(1.0 - 2.0*c)*(grad_cx*gradx[j] + grad_cy*grady[j])*(1.0 - list.phi[j]);
+		lapterm  += omega*alpha*(c)*(1.0 - c)*(1.0 - list.phi[j])*laplacian[j];
+		sqgrad   += omega*alpha*(c)*(1.0 - c)*(gradx[j]*gradx[j] + grady[j]*grady[j]);
+	}
+	return (gradterm + lapterm - sqgrad);
+
+
+
+//	float prodphi[5]; 
 	/***********************/
 	//        up[0]
 	//left[1] centre[2] right[3]
 	//        down[4]
 	/***********************/
+	/*
 	prodphi[0] = node_prodphi_comp(up);
 	prodphi[1] = node_prodphi_comp(left);
 	prodphi[2] = node_prodphi_comp(centre);
@@ -726,6 +763,7 @@ float node_termsumphi_comp(node up, node left, node centre, node right, node dow
 	term_grad = (1 - 2*c)*omega*alpha*(grad_cx*grad_prodphix + grad_cy*grad_prodphiy);
 
 	return (term_grad + term_laplace);
+	*/
 }
 
 float node_prodphi_comp(node n)

@@ -63,33 +63,35 @@ void main()
 
 	int t = 0;
 	int timesteps = 0;
-	extern float total_time,dt;	
+	extern float nd_totaltime,nd_dt;	
+	extern float real_totaltime, real_dt;
 
-	timesteps = (total_time/dt);
-	printf("Time = %f, Total Timesteps: %d\n", total_time, timesteps );
+	timesteps = (int)(nd_totaltime/nd_dt);
+	printf("Real Values : Total Time = %0.2e, Timestep : %0.2e, Number of Timesteps: %d\n", real_totaltime, nd_dt*real_totaltime/nd_totaltime,  timesteps);
 	printf("\n");
+	printf("Non Dimensional Values : Time = %e, Timestep : %0.2e, Number of Timesteps : %d\n", nd_totaltime, nd_dt, timesteps);
 
 	while(t < timesteps + 1)
 	{
-		if (t%1000 == 0) printf("Present Time = %f\n", t*dt);
+		if (t%10000 == 0) printf("Present Time = %0.2e, timestep = %d\n", t*nd_dt*real_totaltime/nd_totaltime, t);
 		
 		// Main solver function //
 		/*    
 		phisolver: string with values to solve phase field parameter
 		csolver  : string with values to solve the composition field
 		*/
-		Solver(phisolver, csolver);
+		Solver(phisolver, csolver, t);
 
 		// All the analysis included in the Analysic function are
 		// evaluated. Currently include only tracking of the grain boundary
 		// at a certain value of phi
-		if(t%1000 == 0) Analysis(t*dt);
+		if(t%10000 == 0) Analysis(t*nd_dt);
 
 		// Returns desired outputs in files
 		if(t == timesteps - 1) Output(t);
 
 		// Different function for output
-		if(t % ((int)(timesteps/2)) == 0) output_visual(t, 1);
+		if(t % ((int)(timesteps/5)) == 0) output_visual(t, 1);
 		t += 1;
 	}
 

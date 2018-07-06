@@ -20,4 +20,8 @@ void output_visual(int t, int grainnum)
 	char FILENAME[100];
 	sprintf( FILENAME, "../output/visual%d_%d.txt", grainnum, t );  
 	node_visual(FILENAME, grainnum);
+
+	char comp_FILENAME[100];
+	sprintf( comp_FILENAME, "../output/visualcomp_%d.txt", t );  
+	node_outputcomp_tofile(comp_FILENAME);
 }

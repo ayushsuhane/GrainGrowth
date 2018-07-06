@@ -6,14 +6,15 @@
 
 
 
-void Solver(char *phisolver, char *csolver)
+void Solver(char *phisolver, char *csolver, int t)
 {
 	/*External Variables*/
 	extern int gridx, gridy;
 	extern int gridsize;
 	extern node *grid;
-	extern float dx;
+	extern float nd_dx;
 	extern char *bc;
+	extern int phi_timestep;
 
 	node list;
 
@@ -61,8 +62,8 @@ void Solver(char *phisolver, char *csolver)
 				right = gidy*gridx + gidx + 1;
 			}
 			//Check the gradient. If no gradient exist, don't solve
-			new_grid[index] = node_phisolver(phisolver, index, grid[up], grid[left], grid[centre], grid[right], grid[down], new_grid[index], dx);
-			new_grid[index] = node_csolver(csolver, index, grid[up], grid[left], grid[centre], grid[right], grid[down], new_grid[index], dx);
+			new_grid[index] = node_phisolver(phisolver, index, grid[up], grid[left], grid[centre], grid[right], grid[down], new_grid[index], nd_dx, t);
+			if(t > phi_timestep) new_grid[index] = node_csolver(csolver, index, grid[up], grid[left], grid[centre], grid[right], grid[down], new_grid[index], nd_dx, t);
 		}
 	}
 	//For corners, copy any of new_grid node, for rest copy the consecutive new_grid value

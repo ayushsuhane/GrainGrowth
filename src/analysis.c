@@ -105,7 +105,7 @@ float analysis_track(int grain1, int grain2, float phi, int xstart, int xstop)
 	//printf("Big : %f, position : %d, Small : %f, position : %d\n", big, bigpos, small, smallpos);
 	float pos;
 	pos = ((float)bigpos + ((big - small)/(bigpos - smallpos))*(phi - big));
-	printf("The interface is at %f\n", pos);
+	printf("The interface is at %f\n and composition on the larger side is %f\n", pos, grid[bigpos].comp);
 	return pos;
 }
 

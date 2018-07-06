@@ -18,7 +18,7 @@ int Initialize(char *init, char *geom)
 	Readinputs();
 	
 	//Print Dimensionalization consants for scaling back to real values
-	Dimensionalize();
+	NonDimensionalize();
 
 	// Evaluate the parameters used in the phase field simulations
 	Parametrize(init);
@@ -43,14 +43,17 @@ void Readinputs(char *init)
 	/* 
 	Extern Variable declarations
 	*/
-	extern float mobility;
-	extern float se;
-	extern float dx;
-	extern float total_time;
-	extern float dt;
-	extern float beta;  		// Artificial force coefficient
+	extern float real_mobility;
+	extern float real_se;
+	extern float real_dx;
+	extern float real_totaltime;
+	extern float real_dt;
+	extern float real_diffusivity;
+	extern float real_beta; 	// Artificial force coefficient
+	extern int beta_timestep;		//timestep after which beta gets activated
+	extern int phi_timestep; 		//timestep to form the interfaces
+	
 	extern float alpha; 		// Parameter representing interaction between solute atoms and Grain Boundary
-	extern float diffusivity;
 	extern float comp;			// Initial Composition
 	extern float temperature;
 
@@ -65,11 +68,13 @@ void Readinputs(char *init)
 	bc = (char *)malloc(15*sizeof(char));
 	
 	grainforce = 0;
-	beta = 0.0;
+	real_beta = 0.0;
 	alpha = 0.0; //If not present, then no segregation potential
-	diffusivity = 0; //If not specified
+	real_diffusivity = 0; //If not specified
 	comp = 0.0; 
-	temperature = 273.0; //Initialize at 273 K
+	temperature = 1273.0; //Initialize at 273 K
+	real_dt = 0.01; //Just in case
+	phi_timestep = 0;
 	/******/
 
 	char FILENAME[] = "../input/parameters.txt";
@@ -94,18 +99,20 @@ void Readinputs(char *init)
 			tmpstr[strcspn(tmpstr, "\r\n")] = 0;
 			tmpval[strcspn(tmpval, "\r\n")] = 0;
 
-			if(!strcmp(tmpstr, "Mobility")) mobility = atof(tmpval);
-			if(!strcmp(tmpstr, "SurfaceEnergy")) se = atof(tmpval);
-			if(!strcmp(tmpstr, "dx")) dx = atof(tmpval);
+			if(!strcmp(tmpstr, "Mobility")) real_mobility = atof(tmpval);
+			if(!strcmp(tmpstr, "SurfaceEnergy")) real_se = atof(tmpval);
+			if(!strcmp(tmpstr, "dx")) real_dx = atof(tmpval);
 			if(!strcmp(tmpstr, "GridX")) gridx = atoi(tmpval);
 			if(!strcmp(tmpstr, "GridY")) gridy = atoi(tmpval);
 			if(!strcmp(tmpstr, "Eta")) eta = atoi(tmpval);
-			if(!strcmp(tmpstr, "TotalTime")) total_time = atof(tmpval);
-			if(!strcmp(tmpstr, "dt")) dt = atof(tmpval);
+			if(!strcmp(tmpstr, "TotalTime")) real_totaltime = atof(tmpval);
+			if(!strcmp(tmpstr, "dt")) real_dt = atof(tmpval);
 			if(!strcmp(tmpstr, "GrainForce")) grainforce = atoi(tmpval);
-			if(!strcmp(tmpstr, "Beta")) beta = atof(tmpval);
+			if(!strcmp(tmpstr, "Beta")) real_beta = atof(tmpval);
+			if(!strcmp(tmpstr, "Betatimestep")) beta_timestep = atoi(tmpval);
+			if(!strcmp(tmpstr, "Phitimestep")) phi_timestep = atoi(tmpval);
 			if(!strcmp(tmpstr, "Alpha")) alpha = atof(tmpval);
-			if(!strcmp(tmpstr, "Diffusivity")) diffusivity = atof(tmpval);
+			if(!strcmp(tmpstr, "Diffusivity")) real_diffusivity = atof(tmpval);
 			if(!strcmp(tmpstr, "Composition")) comp = atof(tmpval);
 			if(!strcmp(tmpstr, "Temperature")) temperature = atof(tmpval);
 			if(!strcmp(tmpstr, "BC")) strcpy(bc,tmpval);
@@ -116,23 +123,25 @@ void Readinputs(char *init)
 	return;
 }
 
-void Dimensionalize()
+void NonDimensionalize()
 {
 	/*
 	Contains the non-dimensional parameters. Check the input with these parameters first
 	*/
 	extern float temperature;
 	float gas_constant = 8.314; // J/K
-	float molar_volume = 1.06e-5; // 1/m^3
-	float length, energy, mob, time;
-	float diffusion;
-	float se_scaling;
-	diffusion = 1e-15; // m^2/s
-	length = 1e-9;     // m
-	energy = (gas_constant*temperature/molar_volume) ; // J/m^2
-	se_scaling = energy*length;
-	time = (length*length)/diffusion;
-	mob = time*length*length/se_scaling;      //  m^4/(Js)
+	float molar_volume = 7.0e-6; // 1/m^3
+	/*Non dimensionalization Constants*/
+	float c_length, c_energy, c_mobility, c_time;
+	float c_diffusivity;
+	float c_se;
+	/********************************/
+	c_diffusivity = 1e-14; // m^2/s
+	c_length = 1e-9;     // m
+	c_energy = (gas_constant*temperature/molar_volume) ; // J/m^2
+	c_se = c_energy*c_length;
+	c_time = (c_length*c_length)/c_diffusivity;
+	c_mobility = c_length/(c_time*c_energy);      //  m^4/(Js)
 	
 	printf("Non Dimensional Constants: \n");
 	printf("For more information : check Dimensionalize function\n");
@@ -143,24 +152,41 @@ void Dimensionalize()
 	where the values here are a*, the values in parameters.txt are a and actual values can be obtained 
 	by multiplying these values depending on their respective scaling behaviour.
 	*/
-	printf("Length Scale : %e\n", length);
-	printf("Time Scale : %e\n", time);
-	printf("Energy Scale : %e\n", energy);
-	printf("Surface Energy Scale Constant : %e\n", se_scaling);
-	printf("Mobility scaling constant : %e\n", mob);
-	printf("Diffusion scaling constant : %e\n", diffusion);
+	printf("Length Scale : %0.2e\n", c_length);
+	printf("Time Scale : %0.2e\n", c_time);
+	printf("Energy Scale : %0.2e\n", c_energy);
+	printf("Surface Energy Scale Constant : %0.2e\n", c_se);
+	printf("Mobility scaling constant : %0.2e\n", c_mobility);
+	printf("Diffusion scaling constant : %0.2e\n", c_diffusivity);
+
+	extern float nd_mobility, real_mobility;
+	extern float nd_se, real_se;
+	extern float nd_dx, real_dx;
+	extern float nd_dt, real_dt;
+	extern float nd_totaltime, real_totaltime;
+	extern float nd_diffusivity, real_diffusivity;
+	extern float nd_beta, real_beta;
+
+	nd_mobility =  real_mobility/c_mobility;
+	nd_se = real_se/c_se;
+	nd_dx = real_dx/c_length;
+	//nd_dt = real_dt/c_time;
+	nd_totaltime = real_totaltime/c_time;
+	nd_diffusivity = real_diffusivity/c_diffusivity;
+	nd_dt = nd_dx*nd_dx/(100.0*nd_diffusivity);
+	nd_beta = real_beta/c_energy;
 
 	return;
 }
 
 void Parametrize(char *init)
 {
-	// Define the parameters like epsilon and omega, mu here, which 
+	// Define the parameters like epsilon and omega, mobility_phi here, which 
 	// can be used in solver functions
-	extern float se;
-	extern float mobility;
+	extern float nd_se;
+	extern float nd_mobility;
 	extern int eta; // Total width of interface
-	extern float dx;
+	extern float nd_dx;
 
 	extern float epsilon;
 	extern float omega;
@@ -169,12 +195,12 @@ void Parametrize(char *init)
 	//Free energy of the form =  `sum_{a,b} (epsilon^2/2)(\nabla \phi_a)(\nabla \phi_b) + omega(\phi_a)(\phi_b)(1 - \alpha*c)
 	if(!strcmp(init, "default"))
 	{
-		omega = 2.0*se/(eta*dx/2.0);
-		epsilon = (4.0/PI)*sqrt(eta*dx*se/2.0);
-		mob_phi = (PI*PI/16.0)*(mobility/(eta*dx/2.0));
+		omega = 2.0*nd_se/(eta*nd_dx);
+		epsilon = (4.0/PI)*sqrt(eta*nd_dx*nd_se);
+		mob_phi = (PI*PI/16.0)*(nd_mobility/(eta*nd_dx));
 
 		printf("Free energy parameters\n");
-		printf("epsilon : %f \t omega : %f \t mob_phi : %f\n",epsilon, omega, mob_phi);
+		printf("epsilon : %0.2e \t omega : %0.2e \t mob_phi : %0.2e\n",epsilon, omega, mob_phi);
 	}
 	else if(!strcmp(init, "equaldiff"))
 	{
@@ -191,14 +217,24 @@ void Parametrize(char *init)
 
 void Printsettings()
 {
-	extern float mobility, se, dx, total_time, dt, beta;
+	extern float nd_mobility, nd_se, nd_dx, nd_totaltime, nd_dt, beta;
+	extern float real_mobility, real_se, real_dx, real_totaltime, real_dt;
 	extern int gridx, gridy, gridsize, eta, grainforce;
 	extern char *bc;
 
 	printf("\n");
 	printf("Settings for simulation:\n");
+	printf("Parameter ---- Dimensional ---- Non Dimensional Values\n");
+	printf("Mobility ---- %0.2e (m^4/Js)---- %0.2e\n", real_mobility, nd_mobility);
+	printf("Surface Energy ---- %0.2e (J/m^2)---- %0.2e\n", real_se, nd_se);
+	printf("dx ---- %0.2e (m)---- %0.2e\n", real_dx, nd_dx);
+	printf("dt ---- %0.2e (s)---- %0.2e\n", real_dt, nd_dt);
+	printf("Total Time ---- %0.2e (s)---- %0.2e\n", real_totaltime, nd_totaltime);
+	printf("Diffusivity ---- %0.2e (m^2/s)---- %0.2e\n", real_diffusivity, nd_diffusivity);
+	printf("Total Domain length ---- %0.2e (m)---- %0.2e\n", gridx*real_dx, gridx*nd_dx);
+
+	printf("Other Settings\n");
 	printf("Rectangular Grid : %d X %d points\n", gridx, gridy);
-	printf("Grid Spacing : %f\n", dx);
 	printf("Boundary Conditions : %s\n", bc);
 	return;
 }
