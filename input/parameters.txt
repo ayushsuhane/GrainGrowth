@@ -1,17 +1,16 @@
-Mobility : 1.76e-14
+Mobility : 1.76e-12
 SurfaceEnergy : 0.3
-Eta : 5
-GridX : 1000
+Eta : 15
+GridX : 2000
 GridY : 1
-dx : 1e-10
-TotalTime : 0.5e-2
+dx : 1.0e-10
+TotalTime : 5e-2
 GrainForce : 1
-Beta : 2e8
+Beta : 0.000
 Betatimestep : 50000
-Phitimestep : 10000
-Alpha : 4.0
+Phitimestep : 50000
+Alpha : 9.0
 BC : drichlet
 Composition : 0.01
-Diffusivity : 1e-14
+Diffusivity : 1e-13
 Temperature : 1273.0
-
