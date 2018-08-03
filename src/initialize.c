@@ -6,6 +6,56 @@
 #include "nodefunctions.h"
 #include<math.h>
 
+int Readcontrols(char *filename)
+{
+	extern char init[100], geometry[100], phisolver[100], csolver[100], initialfile[100];
+	extern int noutput;
+	extern int flag_readfromfile, flag_writetofile;
+	extern double time_constant;
+	flag_readfromfile = 0; // 0 : Not read 1: Reading
+	flag_writetofile = 1;
+	FILE *fp;
+	fp = fopen(filename, "r");
+	if(fp == NULL) 
+	{
+		printf("File to read control parameters not  found");
+		return 0;
+	}
+	printf("%s : Reading Control Parameters\n", filename);
+
+	char tmpstr[20], tmpval[20];
+	char tempbuffer[100];
+	while(!feof(fp))
+	{
+		if(fgets(tempbuffer, 100, fp))
+		{
+			sscanf(tempbuffer, "%20s : %20[^;]", tmpstr, tmpval);
+			tmpstr[strcspn(tmpstr, "\r\n")] = 0;
+			tmpval[strcspn(tmpval, "\r\n")] = 0;
+
+			if(!strcmp(tmpstr, "init")) strcpy(init,tmpval);
+			if(!strcmp(tmpstr, "geometry")) strcpy(geometry,tmpval);
+			if(!strcmp(tmpstr, "phisolver")) strcpy(phisolver,tmpval);
+			if(!strcmp(tmpstr, "csolver")) strcpy(csolver,tmpval);
+			/*To start from a restart file*/
+			if(!strcmp(tmpstr, "readfromfile")) 
+			{
+				strcpy(initialfile,tmpval);
+				flag_readfromfile = 1;
+			}
+
+			if(!strcmp(tmpstr, "flagreadfromfile")) flag_readfromfile = atoi(tmpval);
+			if(!strcmp(tmpstr, "flagwritetofile")) flag_writetofile = atoi(tmpval);
+			if(!strcmp(tmpstr, "noutput")) noutput = atoi(tmpval);
+			if(!strcmp(tmpstr, "time_constant")) time_constant = atof(tmpval);
+		}
+	}
+	printf("%d Visual Output will be generated\n",noutput);
+	printf("Read Control Parameters\n");
+	fclose(fp);
+	return 1;
+}
+
 int Initialize(char *init, char *geom)
 {
 	printf("Initialization : %s\n", init);
@@ -30,7 +80,8 @@ int Initialize(char *init, char *geom)
 	Allocate();
 	
 	//Setup the geometry
-	Setup(geom);
+	Setup_single(geom);
+	//Setup(geom);
 
 	//randomTest();
 	//Check_initialstate();
@@ -38,24 +89,26 @@ int Initialize(char *init, char *geom)
 
 }
 
+
+
 void Readinputs(char *init)
 {
 	/* 
 	Extern Variable declarations
 	*/
-	extern float real_mobility;
-	extern float real_se;
-	extern float real_dx;
-	extern float real_totaltime;
-	extern float real_dt;
-	extern float real_diffusivity;
-	extern float real_beta; 	// Artificial force coefficient
+	extern double real_mobility;
+	extern double real_se;
+	extern double real_dx;
+	extern double real_totaltime;
+	extern double real_dt;
+	extern double real_diffusivity;
+	extern double real_beta; 	// Artificial force coefficient
 	extern int beta_timestep;		//timestep after which beta gets activated
 	extern int phi_timestep; 		//timestep to form the interfaces
 	
-	extern float alpha; 		// Parameter representing interaction between solute atoms and Grain Boundary
-	extern float comp;			// Initial Composition
-	extern float temperature;
+	extern double alpha; 		// Parameter representing interaction between solute atoms and Grain Boundary
+	extern double initcomp;			// Initial Composition
+	extern double temperature;
 
 
 	extern int gridx, gridy;
@@ -71,15 +124,15 @@ void Readinputs(char *init)
 	real_beta = 0.0;
 	alpha = 0.0; //If not present, then no segregation potential
 	real_diffusivity = 0; //If not specified
-	comp = 0.0; 
+	initcomp = 0.0; 
 	temperature = 1273.0; //Initialize at 273 K
 	real_dt = 0.01; //Just in case
 	phi_timestep = 0;
 	/******/
-
-	char FILENAME[] = "../input/parameters.txt";
+    extern char inputfilename[100];
+	//char FILENAME[] = "../input/parameters.txt";
 	FILE *fp;
-	fp = fopen(FILENAME, "r");
+	fp = fopen(inputfilename, "r");
 	
 	//Error check
 	if(fp == NULL) 
@@ -87,7 +140,7 @@ void Readinputs(char *init)
 		printf("File to read parameters not  found");
 		return;
 	}
-	printf("%s : Reading Parameters\n", FILENAME);
+	printf("%s : Reading Parameters\n", inputfilename);
 
 	char tmpstr[15], tmpval[15];
 	char tempbuffer[100];
@@ -113,7 +166,7 @@ void Readinputs(char *init)
 			if(!strcmp(tmpstr, "Phitimestep")) phi_timestep = atoi(tmpval);
 			if(!strcmp(tmpstr, "Alpha")) alpha = atof(tmpval);
 			if(!strcmp(tmpstr, "Diffusivity")) real_diffusivity = atof(tmpval);
-			if(!strcmp(tmpstr, "Composition")) comp = atof(tmpval);
+			if(!strcmp(tmpstr, "Composition")) initcomp = atof(tmpval);
 			if(!strcmp(tmpstr, "Temperature")) temperature = atof(tmpval);
 			if(!strcmp(tmpstr, "BC")) strcpy(bc,tmpval);
 		}
@@ -128,20 +181,23 @@ void NonDimensionalize()
 	/*
 	Contains the non-dimensional parameters. Check the input with these parameters first
 	*/
-	extern float temperature;
-	float gas_constant = 8.314; // J/K
-	float molar_volume = 7.0e-6; // 1/m^3
+	extern double temperature;
+	double gas_constant = 8.314; // J/K
+	double molar_volume = 7.1e-6; // 1/m^3
 	/*Non dimensionalization Constants*/
-	float c_length, c_energy, c_mobility, c_time;
-	float c_diffusivity;
-	float c_se;
+	extern double c_length, c_time, c_diffusivity, c_energy, c_mobility;
 	/********************************/
-	c_diffusivity = 1e-14; // m^2/s
-	c_length = 1e-9;     // m
-	c_energy = (gas_constant*temperature/molar_volume) ; // J/m^2
-	c_se = c_energy*c_length;
+	extern double real_dx, real_diffusivity; 
+	extern int eta;
+	extern int gridx;
+	//c_diffusivity = 1e-14; // m^2/s
+	c_diffusivity = real_diffusivity;
+	c_length = real_dx;
+	//c_length = 1e-10;     // m
+	c_energy = (gas_constant*temperature/molar_volume) ; // J/m^3
+	//c_se = c_energy*c_length;
 	c_time = (c_length*c_length)/c_diffusivity;
-	c_mobility = c_length/(c_time*c_energy);      //  m^4/(Js)
+	c_mobility = 1/(c_time*c_energy);      //  m^3/(Js)
 	
 	printf("Non Dimensional Constants: \n");
 	printf("For more information : check Dimensionalize function\n");
@@ -155,26 +211,29 @@ void NonDimensionalize()
 	printf("Length Scale : %0.2e\n", c_length);
 	printf("Time Scale : %0.2e\n", c_time);
 	printf("Energy Scale : %0.2e\n", c_energy);
-	printf("Surface Energy Scale Constant : %0.2e\n", c_se);
-	printf("Mobility scaling constant : %0.2e\n", c_mobility);
+	//printf("Surface Energy Scale Constant : %0.2e\n", c_se);
+	printf("Mobility Phi scaling constant : %0.2e\n", c_mobility);
 	printf("Diffusion scaling constant : %0.2e\n", c_diffusivity);
 
-	extern float nd_mobility, real_mobility;
-	extern float nd_se, real_se;
-	extern float nd_dx, real_dx;
-	extern float nd_dt, real_dt;
-	extern float nd_totaltime, real_totaltime;
-	extern float nd_diffusivity, real_diffusivity;
-	extern float nd_beta, real_beta;
+	extern double nd_mobility, real_mobility;
+	//extern double nd_se, real_se;
+	extern double nd_dx, real_dx;
+	extern double nd_dt, real_dt;
+	extern double nd_totaltime, real_totaltime;
+	extern double nd_diffusivity, real_diffusivity;
+	extern double nd_beta, real_beta;
 
-	nd_mobility =  real_mobility/c_mobility;
-	nd_se = real_se/c_se;
+	extern double time_constant;
+
+	printf("Time constant = %e\n", time_constant);
+	//nd_mobility =  real_mobility/c_mobility;
+	//nd_se = real_se/c_se;
 	nd_dx = real_dx/c_length;
 	//nd_dt = real_dt/c_time;
 	nd_totaltime = real_totaltime/c_time;
 	nd_diffusivity = real_diffusivity/c_diffusivity;
-	nd_dt = nd_dx*nd_dx/(100.0*nd_diffusivity);
-	nd_beta = real_beta/c_energy;
+	nd_dt = nd_dx*nd_dx/(time_constant*nd_diffusivity);
+	nd_beta = real_beta;
 
 	return;
 }
@@ -183,24 +242,31 @@ void Parametrize(char *init)
 {
 	// Define the parameters like epsilon and omega, mobility_phi here, which 
 	// can be used in solver functions
-	extern float nd_se;
-	extern float nd_mobility;
-	extern int eta; // Total width of interface
-	extern float nd_dx;
+	//extern double nd_se;
+	//extern double nd_mobility;
+	extern int eta; // half width of interface
+	extern double real_dx;
+	extern double real_se;
+	extern double c_energy, c_length, c_mobility;
+	//extern double nd_dx;
 
-	extern float epsilon;
-	extern float omega;
-	extern float mob_phi;
+	extern double epsilon;
+	extern double omega;
+	extern double mob_phi;
 
 	//Free energy of the form =  `sum_{a,b} (epsilon^2/2)(\nabla \phi_a)(\nabla \phi_b) + omega(\phi_a)(\phi_b)(1 - \alpha*c)
 	if(!strcmp(init, "default"))
 	{
-		omega = 2.0*nd_se/(eta*nd_dx);
-		epsilon = (4.0/PI)*sqrt(eta*nd_dx*nd_se);
-		mob_phi = (PI*PI/16.0)*(nd_mobility/(eta*nd_dx));
+		omega = 2.0*real_se/(eta*real_dx);
+		epsilon = (4.0/PI)*sqrt(eta*real_dx*real_se);
+		mob_phi = (PI*PI/16.0)*(real_mobility/(eta*real_dx));
 
 		printf("Free energy parameters\n");
-		printf("epsilon : %0.2e \t omega : %0.2e \t mob_phi : %0.2e\n",epsilon, omega, mob_phi);
+		printf("Real - epsilon : %0.2e \t omega : %0.2e \t mob_phi : %0.2e\n",epsilon, omega, mob_phi);
+		omega = omega/c_energy;
+		epsilon = epsilon/(c_length*sqrt(c_energy));
+		mob_phi = mob_phi/c_mobility;
+		printf("Scaled: -epsilon : %0.2e \t omega : %0.2e \t mob_phi : %0.2e\n",epsilon, omega, mob_phi);
 	}
 	else if(!strcmp(init, "equaldiff"))
 	{
@@ -217,16 +283,16 @@ void Parametrize(char *init)
 
 void Printsettings()
 {
-	extern float nd_mobility, nd_se, nd_dx, nd_totaltime, nd_dt, beta;
-	extern float real_mobility, real_se, real_dx, real_totaltime, real_dt;
+	extern double nd_mobility, nd_se, nd_dx, nd_totaltime, nd_dt, beta;
+	extern double real_mobility, real_se, real_dx, real_totaltime, real_dt;
 	extern int gridx, gridy, gridsize, eta, grainforce;
 	extern char *bc;
 
 	printf("\n");
 	printf("Settings for simulation:\n");
 	printf("Parameter ---- Dimensional ---- Non Dimensional Values\n");
-	printf("Mobility ---- %0.2e (m^4/Js)---- %0.2e\n", real_mobility, nd_mobility);
-	printf("Surface Energy ---- %0.2e (J/m^2)---- %0.2e\n", real_se, nd_se);
+	//printf("Mobility ---- %0.2e (m^4/Js)---- %0.2e\n", real_mobility, nd_mobility);
+//	printf("Surface Energy ---- %0.2e (J/m^2)---- %0.2e\n", real_se, nd_se);
 	printf("dx ---- %0.2e (m)---- %0.2e\n", real_dx, nd_dx);
 	printf("dt ---- %0.2e (s)---- %0.2e\n", real_dt, nd_dt);
 	printf("Total Time ---- %0.2e (s)---- %0.2e\n", real_totaltime, nd_totaltime);
@@ -259,41 +325,44 @@ void Setup(char *geom)
 	extern node *grid;
 	extern int gridsize;
 	extern int gridx, gridy;
-	extern float comp;
+	extern double initcomp;
+	extern int flag_readfromfile;
+	extern char initialfile[100];
 
+	printf("File to readfrom : %s\n", initialfile);
 	int index;
-	if(!strcmp(geom, "linear"))
+	if(!strcmp(geom, "linear") && !flag_readfromfile)
 	{
 		for(int i=0;i<gridx;i++)
 		{
 			for(int j = 0; j < gridy; j++)
 			{
 				index = j*gridx + i;
-				grid[index].activegrain = (int *)malloc(1 * sizeof(int));
-				grid[index].phi = (float *)malloc(1 * sizeof(float));
-				grid[index].phase = (char *)malloc(1 * sizeof(char));
+				//grid[index].activegrain = (int *)malloc(1 * sizeof(int));
+				//grid[index].phi = (double *)malloc(1 * sizeof(double));
+				//grid[index].phase = (char *)malloc(1 * sizeof(char ));
 				grid[index].nactive = 1;
 				if(i<gridx/2)
 				{		
 					grid[index].activegrain[0] = 1;
 					grid[index].phi[0] = 1;
 					grid[index].phase[0] = 'f';
-					grid[index].comp = comp;
+					grid[index].comp = initcomp;
 				}
 				else					
 				{
 					grid[index].activegrain[0] = 2;
 					grid[index].phi[0] = 1;
 					grid[index].phase[0] = 'f';
-					grid[index].comp = comp;
+					grid[index].comp = initcomp;
 				}
 			}	
 		}
 	}
-	else if(!strcmp(geom, "circle"))
+	else if(!strcmp(geom, "circle") && !flag_readfromfile)
 	{
 		printf("Setting the geometry to circle with radius 0.3*size of grid points. Change the radius from the initialize.c, if required\n");
-		float radius = 0.3*gridx;
+		double radius = 0.3*gridx;
 		if(gridy < 2*radius) 
 		{
 			printf("Grid Size not enough for the required geometry\n");
@@ -304,26 +373,66 @@ void Setup(char *geom)
 			for(int j = 0; j < gridy; j++)
 			{
 				index = j*gridx + i;
-				grid[index].activegrain = (int *)malloc(1 * sizeof(int));
-				grid[index].phi = (float *)malloc(1 * sizeof(float));
-				grid[index].phase = (char *)malloc(1 * sizeof(char));
+				//grid[index].activegrain = (int *)malloc(1 * sizeof(int));
+				//grid[index].phi = (double *)malloc(1 * sizeof(double));
+				//grid[index].phase = (char *)malloc(1 * sizeof(char));
 				grid[index].nactive = 1;
 				if ((i - gridx/2)*(i - gridx/2) + (j - gridy/2)*(j - gridy/2) < radius*radius) 
 				{		
 					grid[index].activegrain[0] = 1;
 					grid[index].phi[0] = 1;
 					grid[index].phase[0] = 'f';
-					grid[index].comp = comp;
+					grid[index].comp = initcomp;
 				}
 				else					
 				{
 					grid[index].activegrain[0] = 2;
 					grid[index].phi[0] = 1;
 					grid[index].phase[0] = 'f';
-					grid[index].comp = comp;
+					grid[index].comp = initcomp;
 				}
 			}	
 		}	
+	}
+	else if(flag_readfromfile)
+	{
+		/*Read file here*/
+		FILE *initsetup = fopen(initialfile, "r");
+		if (initsetup == NULL)
+		{
+			printf("FILE NOT FOUND. Resetting back to running from the scratch");
+			flag_readfromfile = 0;
+			Setup(geom);
+			return;
+		}
+		extern int gridsize, gridx, gridy;
+		for (int i=0; i<gridx ; i++)
+		{
+			for (int j=0; j<gridy; j++)
+			{
+				index = j*gridx + i;
+				fscanf(initsetup, "%d\n", &index);
+				fscanf(initsetup, "%d\n", &grid[index].nactive);
+				/**Allocate memory for filling data**/
+				//grid[index].activegrain = (int *)malloc(grid[index].nactive * sizeof(int));
+				//grid[index].phi = (double *)malloc(grid[index].nactive * sizeof(double));
+				//grid[index].phase = (char *)malloc(grid[index].nactive * sizeof(char));
+				/*fill data*/
+				for(int k=0; k< grid[index].nactive; k++)
+					fscanf(initsetup, "%d ", &grid[index].activegrain[k]);
+				fscanf(initsetup, "\n");
+				for(int k=0; k< grid[index].nactive; k++)
+					fscanf(initsetup, "%le ", &grid[index].phi[k]);
+				fscanf(initsetup, "\n");
+				for(int k=0; k< grid[index].nactive; k++)
+					fscanf(initsetup, "%c ", &grid[index].phase[k]);
+				fscanf(initsetup, "\n");
+				fscanf(initsetup, "%le\n", &grid[index].comp);
+				fscanf(initsetup, "\n");
+			}
+			fscanf(initsetup,"\n");
+		}
+		fclose(initsetup);
 	}
 	else 
 	{
@@ -347,7 +456,7 @@ void Check_initialstate()
 	int i;
 	for(i=0;i<gridsize;i++)
 	{
-		printf("%d ", *grid[i].activegrain);
+		printf("%d %lf\n", *grid[i].activegrain, *grid[i].phi);
 	}
 	return;
 }
@@ -359,11 +468,13 @@ void randomTest()
 
 	grid1 = node_alloc(gridsize);
 	printf("SUCCESS in Allocation\n");
-
+	/*
 	for(int i = 0; i< gridsize; i++)
 	{
 		node_dealloc(grid1[i]);	
 	}
+	*/
+	free(grid1);
 	
 	printf("Successfully deallocated\n");
 }
@@ -375,7 +486,139 @@ void FreeMemory()
 
 	extern node *grid;
 	extern int gridsize;
-	for(int i = 0 ; i < gridsize ; i++) node_dealloc(grid[i]);
+	//for(int i = 0 ; i < gridsize ; i++) node_dealloc(grid[i]);
 	free(grid);
 
+}
+
+
+
+/********************************************************/
+/*****Single Setup *************************************/
+/**********Only for one phi*****************************/
+void Setup_single(char *geom)
+{
+	/*
+	Setup the geometry for 1D grain growth with two phase field parameters
+	*/
+	extern node *grid;
+	extern int gridsize;
+	extern int gridx, gridy;
+	extern double initcomp;
+	extern int flag_readfromfile;
+	extern char initialfile[100];
+
+	printf("File to readfrom : %s\n", initialfile);
+	int index;
+	if(flag_readfromfile == 0) printf("Not reading any previous file");
+	if(!strcmp(geom, "linear") && !flag_readfromfile)
+	{
+		for(int i=0;i<gridx;i++)
+		{
+			for(int j = 0; j < gridy; j++)
+			{
+				index = j*gridx + i;
+				//grid[index].activegrain = (int *)malloc(1 * sizeof(int));
+				//grid[index].phi = (double *)malloc(1 * sizeof(double));
+				//grid[index].phase = (char *)malloc(1 * sizeof(char ));
+				grid[index].nactive = 1;
+				if(i<gridx/2)
+				{		
+					grid[index].activegrain[0] = 1;
+					grid[index].phi[0] = 1.0;
+					grid[index].phase[0] = 'f';
+					grid[index].comp = initcomp;
+				}
+				else					
+				{
+					grid[index].activegrain[0] = 1;
+					grid[index].phi[0] = 0.0;
+					grid[index].phase[0] = 'f';
+					grid[index].comp = initcomp;
+				}
+			}	
+		}
+	}
+	else if(!strcmp(geom, "circle") && !flag_readfromfile)
+	{
+		printf("Setting the geometry to circle with radius 0.3*size of grid points. Change the radius from the initialize.c, if required\n");
+		double radius = 0.3*gridx;
+		if(gridy < 2*radius) 
+		{
+			printf("Grid Size not enough for the required geometry\n");
+			exit(1);
+		}
+		for(int i=0;i<gridx;i++)
+		{
+			for(int j = 0; j < gridy; j++)
+			{
+				index = j*gridx + i;
+				//grid[index].activegrain = (int *)malloc(1 * sizeof(int));
+				//grid[index].phi = (double *)malloc(1 * sizeof(double));
+				//grid[index].phase = (char *)malloc(1 * sizeof(char));
+				grid[index].nactive = 1;
+				if ((i - gridx/2)*(i - gridx/2) + (j - gridy/2)*(j - gridy/2) < radius*radius) 
+				{		
+					grid[index].activegrain[0] = 1;
+					grid[index].phi[0] = 1.0;
+					grid[index].phase[0] = 'f';
+					grid[index].comp = initcomp;
+				}
+				else					
+				{
+					grid[index].activegrain[0] = 1;
+					grid[index].phi[0] = 0.0;
+					grid[index].phase[0] = 'f';
+					grid[index].comp = initcomp;
+				}
+			}	
+		}	
+	}
+	else if(flag_readfromfile)
+	{
+		/*Read file here*/
+		FILE *initsetup = fopen(initialfile, "r");
+		if (initsetup == NULL)
+		{
+			printf("FILE NOT FOUND. Resetting back to running from the scratch");
+			flag_readfromfile = 0;
+			Setup(geom);
+			return;
+		}
+		extern int gridsize, gridx, gridy;
+		for (int i=0; i<gridx ; i++)
+		{
+			for (int j=0; j<gridy; j++)
+			{
+				index = j*gridx + i;
+				fscanf(initsetup, "%d\n", &index);
+				fscanf(initsetup, "%d\n", &grid[index].nactive);
+				/**Allocate memory for filling data**/
+				//grid[index].activegrain = (int *)malloc(grid[index].nactive * sizeof(int));
+				//grid[index].phi = (double *)malloc(grid[index].nactive * sizeof(double));
+				//grid[index].phase = (char *)malloc(grid[index].nactive * sizeof(char));
+				/*fill data*/
+				for(int k=0; k< grid[index].nactive; k++)
+					fscanf(initsetup, "%d ", &grid[index].activegrain[k]);
+				fscanf(initsetup, "\n");
+				for(int k=0; k< grid[index].nactive; k++)
+					fscanf(initsetup, "%le ", &grid[index].phi[k]);
+				fscanf(initsetup, "\n");
+				for(int k=0; k< grid[index].nactive; k++)
+					fscanf(initsetup, "%c ", &grid[index].phase[k]);
+				fscanf(initsetup, "\n");
+				fscanf(initsetup, "%le\n", &grid[index].comp);
+				fscanf(initsetup, "\n");
+			}
+			fscanf(initsetup,"\n");
+		}
+		fclose(initsetup);
+	}
+	else 
+	{
+		printf("Geometry parameter not supported\n");
+		exit(2);
+	}
+	
+	return;
 }

@@ -1,36 +1,38 @@
 #ifndef GLOBAL_H
 #define GLOBAL_H
 
-/*Floating point precisions*/
-float real_se; 		//Surface Energy 		
-float real_mobility; // Mobility of the interface
-float real_dx; 		// spacing between grid points
-float real_totaltime; // Total time for the simulation
-float real_dt; //timestep
-float real_diffusivity; //Diffusivity
-float real_beta; //beta from free energy density
+
+/*doubleing point precisions*/
+double real_se; 		//Surface Energy 		
+double real_mobility; // Mobility of the interface
+double real_dx; 		// spacing between grid points
+double real_totaltime; // Total time for the simulation
+double real_dt; //timestep
+double real_diffusivity; //Diffusivity
+double real_beta; //beta from free energy density
 
 //Non dimensional parameters
 /*******************************/
-float nd_se;
-float nd_mobility; // Mobility of the interface
-float nd_dx; 		// spacing between grid points
-float nd_totaltime; // Total time for the simulation
-float nd_dt; //timestep
-float nd_diffusivity;
-float nd_beta;
+double c_time, c_length, c_diffusivity, c_mobility, c_energy;
+double nd_se;
+double nd_mobility; // Mobility of the interface
+double nd_dx; 		// spacing between grid points
+double nd_totaltime; // Total time for the simulation
+double nd_dt; //timestep
+double nd_diffusivity;
+double nd_beta;
 /*****************************/
-
-float beta; //beta for grain force
+double dt;
+double beta; //beta for grain force
 int beta_timestep;
 int phi_timestep;
-float alpha; // Dependence of omega on composition
-float comp;
-float temperature;
+double alpha; // Dependence of omega on composition
+double initcomp;
+double temperature;
 
-float epsilon; // Free energy of the form =  `sum_{a,b} (epsilon^2/2)(\nabla \phi_a)(\nabla \phi_b) 
-float omega;	//  + omega(\phi_a)(\phi_b)(1 - \alpha*c)
-float mob_phi; // parametrized mobility
+double epsilon; // Free energy of the form =  `sum_{a,b} (epsilon^2/2)(\nabla \phi_a)(\nabla \phi_b) 
+double omega;	//  + omega(\phi_a)(\phi_b)(1 - \alpha*c)
+double mob_phi; // parametrized mobility
 
 /*Integer points*/
 int gridx; 	// Gridpoints in x 
@@ -39,9 +41,14 @@ int gridsize;
 int eta;		// Interface thickness in grid points
 
 char *bc;
+char inputfilename[100], controlinputfilename[100];
+int noutput;
 
+char init[100], geometry[100],  phisolver[100], csolver[100], initialfile[100];
 
 int grainforce;
+int flag_readfromfile, flag_writetofile;
+double time_constant;
 
 #define PI 3.14159
 #endif

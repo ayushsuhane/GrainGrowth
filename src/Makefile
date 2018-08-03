@@ -1,7 +1,7 @@
 IDIR = ../include
 
-#CC=gcc -W -Wall -g
-CC=gcc 
+#CC=gcc -W -Wall -ggdb3 -g
+CC=gcc -O3
 CFLAGS=-I$(IDIR)
 
 ODIR = obj
