@@ -61,8 +61,11 @@ node node_update_single(node);
 node node_phisolver(char *, int, node, node, node, node, node, node,  double, int);
 node node_phisolver_single(char *, int, node, node, node, node, node, node, node, node,  double, int);
 
+
 double node_csolver(char *, int, node, node, node, node, node, node, double, int);
 double node_csolver_single(char *, int, node, node, node, node, node, node, node, double, int);
+double node_csolver_singlecons(char *, int, node, node, node, node, node, node, node, double, int);
+double node_calcmu(node);
 
 double node_calcflux_x(node, node, node, node, node);
 #endif

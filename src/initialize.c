@@ -253,6 +253,8 @@ void Parametrize(char *init)
 	extern double epsilon;
 	extern double omega;
 	extern double mob_phi;
+	extern double nd_dt, nd_dx;
+	extern double time_constant;
 
 	//Free energy of the form =  `sum_{a,b} (epsilon^2/2)(\nabla \phi_a)(\nabla \phi_b) + omega(\phi_a)(\phi_b)(1 - \alpha*c)
 	if(!strcmp(init, "default"))
@@ -267,6 +269,8 @@ void Parametrize(char *init)
 		epsilon = epsilon/(c_length*sqrt(c_energy));
 		mob_phi = mob_phi/c_mobility;
 		printf("Scaled: -epsilon : %0.2e \t omega : %0.2e \t mob_phi : %0.2e\n",epsilon, omega, mob_phi);
+		nd_dt = fmin(nd_dt, nd_dx*nd_dx/(time_constant*mob_phi));
+
 	}
 	else if(!strcmp(init, "equaldiff"))
 	{
@@ -439,7 +443,8 @@ void Setup(char *geom)
 		printf("Geometry parameter not supported\n");
 		exit(2);
 	}
-	
+
+    
 	return;
 }
 

@@ -934,8 +934,8 @@ node node_phisolver_single(char *phisolver, int index, node up, node nextleft, n
 		double laplacian;
 		double k = 0.0;
 		if(t > beta_timestep) k = 1.0;
-		//laplacian = ((right.phi[0] + left.phi[0] - 2.0*centre.phi[0])/(dx*dx) + (up.phi[0] + down.phi[0] - 2.0*centre.phi[0])/(dx*dx));
-		laplacian = (-nextright.phi[0] + 16.0*right.phi[0] - 30.0*centre.phi[0] + 16.0*left.phi[0] - nextleft.phi[0])/(12.0*dx*dx);
+		laplacian = ((right.phi[0] + left.phi[0] - 2.0*centre.phi[0])/(dx*dx) + (up.phi[0] + down.phi[0] - 2.0*centre.phi[0])/(dx*dx));
+		//laplacian = (-nextright.phi[0] + 16.0*right.phi[0] - 30.0*centre.phi[0] + 16.0*left.phi[0] - nextleft.phi[0])/(12.0*dx*dx);
 		for (int i=0; i< list.nactive; i++)
 		{ 
 			list.phi[i] = centre.phi[i] + nd_dt*mob_phi*(epsilon*epsilon*laplacian - omega*(1.0 - alpha*centre.comp)*(1.0 - 2.0*centre.phi[i]) - k*nd_beta*6.0*centre.phi[0]*(1.0-centre.phi[0]));
@@ -996,3 +996,69 @@ double node_csolver_single(char *solver, int index, node up, node nextleft, node
 }
 
 /******************************************************************/
+
+double node_calcmu(node n)
+{
+	extern double omega, alpha;
+	return(log(n.comp/(1 - n.comp)) - omega*alpha*n.phi[0]*(1 - n.phi[0]));
+}
+
+double node_csolver_singlecons(char *solver, int index, node up, node nextleft, node left, node centre, node right, node nextright, node down, double dx, int t)
+{
+	if(!strcmp(solver, "equalcomp"))
+	{
+		double c;
+		double gradphi, gradc;
+		double laplacian_phi, laplacian_c;
+		double mu[3];
+		extern double nd_dt;
+		extern double nd_diffusivity;
+		extern double omega, alpha;
+		extern int phi_timestep;
+		double tol = 1e-12;
+		if(alpha < tol) return centre.comp;
+		int intf_flag;
+		int c_flag;
+
+		/*###########*/
+		/*
+		/*mu[0]  mu[1]  mu[2]
+		/*
+		/*###########*/
+		mu[0] = node_calcmu(left);
+		mu[1] = node_calcmu(centre);
+		mu[2] = node_calcmu(right);
+
+		intf_flag = node_checkgradient2D_single(up, nextleft, left, centre, right, nextright, down);
+		c_flag = node_checkgradient2D_comp_single(up.comp, nextleft.comp, left.comp, centre.comp, right.comp, nextright.comp, down.comp);
+		if(!intf_flag && !c_flag) return centre.comp;
+
+		double M[3];
+		/** M[0]  M[1]   M[2] */
+		M[0] = nd_diffusivity*left.comp*(1 - left.comp);
+		M[1] = nd_diffusivity*centre.comp*(1 - centre.comp);
+		M[2] = nd_diffusivity*right.comp*(1 - right.comp);
+
+
+
+		//gradphi = (right.phi[0] - left.phi[0])/(2.0*dx);
+		//gradc = (right.comp - left.comp)/(2.0*dx);
+		//gradphi = (right.phi[0] - centre.phi[0])/(dx);
+		//gradc = (right.comp - centre.comp)/(dx);
+
+		c = centre.comp + nd_dt*( ((M[2]+M[1])/2.0)*(mu[2] - mu[1]) - ((M[0]+M[1])/2.0)*(mu[1] - mu[0]))/(dx*dx);
+		
+		
+		//c = centre.comp + nd_dt*(nd_diffusivity*laplacian_c  - k*nd_diffusivity*omega*alpha*(t1 + t2 + t3));
+		//if (((index == 94) || (index==2) || (index ==3)|| (index == 495) || (index == 496) || (index == 497) || (index == 498) || (index == 499) || (index == 500) || (index == 491) || (index == 492) || (index == 493) || 
+		//	(index == 494) || (index == 485) || (index == 486) || (index == 487) || (index == 488) || (index == 489) || (index == 490) || (index == 4) || (index == 5) || (index == 6))
+		//	 && (t%10000 == 1 ))
+		//	printf("%d Phi : %lf, composition : %lf, updatecomp: %lf, gradphi : %lf, gradc : %lf, laplacephi : %lf, laplace_c : %e, lcomp:%e, rcomp:%e, term laplace : %e, other: %e, total : %e, t1 : %lf, t2 : %lf, t3 : %lf Flux = %e Potential = %e\n",
+		//		index, centre.phi[0], centre.comp, c, gradphi, gradc, laplacian_phi, laplacian_c, left.comp, right.comp, nd_diffusivity*laplacian_c, nd_diffusivity*omega*alpha*(t1 + t2 + t3) ,
+		//	    (c - centre.comp)/nd_dt,
+		//		(t1), (t2), (t3), (nd_diffusivity*gradc - nd_diffusivity*omega*alpha*centre.comp*(1.0 - centre.comp)*(1.0 - 2.0*centre.phi[0])*gradphi), log(centre.comp/(1.0-centre.comp)) -omega*alpha*centre.phi[0]*(1.0 - centre.phi[0])  );
+		
+		return c;
+	}
+	return 0.0;
+}

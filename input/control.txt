@@ -4,7 +4,7 @@ analysis : track : 0.5
 phisolver : MPF
 csolver : equalcomp
 readfromfile : ../input/initial.inp
-flagreadfromfile : 0
+flagreadfromfile : 1
 flagwritetofile : 0
-noutput : 5000
-time_constant : 20
+noutput : 100
+time_constant : 500

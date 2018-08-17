@@ -190,7 +190,7 @@ void Solver_single(char *phisolver, char *csolver, int t)
 			}
 			//Check the gradient. If no gradient exist, don't solve
 			new_grid[index] = node_phisolver_single(phisolver, index, grid[up], grid[nextleft], grid[left], grid[centre], grid[right], grid[nextright], grid[down], new_grid[index], nd_dx, t);
-			if(t > phi_timestep) new_grid[index].comp = node_csolver_single(csolver, index, grid[up], grid[nextleft], grid[left], grid[centre], grid[right], grid[nextright], grid[down], nd_dx, t);
+			if(t > phi_timestep) new_grid[index].comp = node_csolver_singlecons(csolver, index, grid[up], grid[nextleft], grid[left], grid[centre], grid[right], grid[nextright], grid[down], nd_dx, t);
 			else new_grid[index].comp = grid[centre].comp;
 			/**Check for potential*/
 			/*********************/
